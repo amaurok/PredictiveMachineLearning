@@ -1,0 +1,94 @@
+
+# Machine Learning Predictive Algorithm
+Andres Mauricio Castro
+
+## Executive Summary
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+In this study, we are going to construct a predictive model, in order to predict the manner how the persons did the exercise.
+
+## Data Processing
+We load the both data sets for the study, and required packages.
+
+```{r}
+library(caret)
+
+path <- getwd()
+if(!file.exists(path)){ 
+  dir.create(path)
+}
+
+trainingSetUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testSetUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+trainingFileName <- "pml-training.csv"
+testFileName <- "pml-testing.csv"
+
+if (!file.exists(trainingFileName)) {
+    download.file(trainingSetUrl,file.path(path, trainingFileName))
+}
+if (!file.exists(testFileName)) {
+    download.file(testSetUrl,file.path(path, testFileName))
+}
+
+trainingData <- read.csv(file=trainingFileName,head=TRUE,sep=",",na.strings=c('NA','','#DIV/0!'))
+testingData <- read.csv(file=testFileName,head=TRUE,sep=",",na.strings=c('NA','','#DIV/0!'))
+```
+
+## Data Processing
+By looking at the structure of the columns in the training data set, we find a lot of columns with NA values.
+The first step is to clean the data set, by getting rid of such columns.
+Also, we attempt to drop the columns which are not numeric, or with continuous values, which are not useful to construct our model.
+
+After removing the NA columns, we can see the first six columns
+
+```{r}
+head(trainingData)
+trainingData <- trainingData[sapply(trainingData, function(x) !any(is.na(x)))]
+trainingData <- trainingData[,-c(1,2,3,4,5,6)]
+```
+
+## Model Construction
+
+As we can see, there are a lot variables to be used as predictors.
+We can perform a principal components analysis, to see if we can reduce the set of predictor variables, to construct our model, and which of them allow us to explain as much variance as possible.
+
+```{r}
+M <- abs(cor(trainingData[,-54]))
+diag(M) <- 0
+which(M > 0.9,arr.ind=T)
+```
+
+We see, we could use just 12 features to construct our model, and they capture the 90% of the variability, and have a reduced noise.
+To find an optimal model, we will use cross-validation, by splitting the training data set, into a training sample with 70% of the data, and 30% of the data in a testing data set, to perform the cross-validation.
+
+We plot the variable classe in the resulting training sub set, and see the classifications are within an order of magnitude of one another.
+
+```{r}
+inTrain <- createDataPartition(y=trainingData$classe,p=0.7, list=FALSE)
+training <- trainingData[inTrain,]
+testing <- trainingData[-inTrain,]
+
+qplot(training$classe)
+```
+
+As this is a problem of classification, a random forest model is chosen.
+For simplicity, we train our model, indicating to the algorithm to perform a pre-processing transformation, by using the principal components analysis, and evaluate the final model.
+
+```{r  warning=FALSE}
+modelFit <- train(training$classe ~ .,method="rf",preProcess="pca",data=training)
+confusionMatrix(testing$classe,predict(modelFit,testing))
+```
+
+Our model is a good one, with 98% of accuracy.
+Now, we can proceed to perform our predictions; firstly, we clean the testing data set provided, and apply our model, to solve our problem.
+
+These are the predictions, of how the exercise was performed, for the 20 records in the data set.
+
+```{r}
+testingData <- testingData[sapply(testingData, function(x) !any(is.na(x)))] 
+testingData <- testingData[,-c(1,2,3,4,5,6)]
+predictions <- predict(modelFit, testingData)
+print(predictions)
+```
